@@ -10,7 +10,7 @@ Abre `index.html` en el navegador o sirve la carpeta con cualquier servidor est�
 
 ## Publicarlo con GitHub Pages
 
-El sitio se publica desde la rama `j3np4y-portafolio-profesional`, en la carpeta `/ (root)`. Para cambiar la rama de publicación, ve a `Settings > Pages` y selecciona `Deploy from a branch`.
+El sitio se publica desde la rama `main`, en la carpeta `/ (root)`. La configuración está en `Settings > Pages` (`Deploy from a branch`).
 
 ## Contenido y mantenimiento
 
