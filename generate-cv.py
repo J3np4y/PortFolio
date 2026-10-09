@@ -1,19 +1,31 @@
-"""Genera un CV PDF de una página sin dependencias externas."""
+"""Genera un CV PDF público de hasta dos páginas sin dependencias externas."""
 
 from pathlib import Path
 import textwrap
 
 PAGE_W, PAGE_H = 595.28, 841.89
-MARGIN = 52
+MARGIN = 48
+BOTTOM = 48
 GREEN = (0.06, 0.42, 0.24)
 DARK = (0.10, 0.12, 0.15)
 GREY = (0.36, 0.40, 0.45)
-ops = []
+pages = [[]]
+ops = pages[0]
 y = MARGIN
 
 
-def emit(text, font="F1", size=9.2, color=DARK, gap=0):
+def new_page():
+    global ops, y
+    ops = []
+    pages.append(ops)
+    y = MARGIN
+
+
+def emit(text, font="F1", size=8.7, color=DARK, gap=0):
     global y
+    leading = size * 1.29
+    if y + leading + gap > PAGE_H - BOTTOM:
+        new_page()
     text = text.encode("cp1252", "replace").decode("cp1252")
     text = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
     red, green, blue = color
@@ -21,11 +33,11 @@ def emit(text, font="F1", size=9.2, color=DARK, gap=0):
         f"BT /{font} {size:.1f} Tf {red:.3f} {green:.3f} {blue:.3f} rg "
         f"1 0 0 1 {MARGIN:.2f} {PAGE_H-y:.2f} Tm ({text}) Tj ET"
     )
-    y += size * 1.32 + gap
+    y += leading + gap
 
 
-def paragraph(text, size=9.2, gap=4):
-    width = int((PAGE_W - 2 * MARGIN) / (size * 0.51))
+def paragraph(text, size=8.7, gap=3):
+    width = int((PAGE_W - 2 * MARGIN) / (size * 0.50))
     for line in textwrap.wrap(text, width=width, break_long_words=False):
         emit(line, size=size)
     global y
@@ -34,18 +46,18 @@ def paragraph(text, size=9.2, gap=4):
 
 def section(title):
     global y
-    y += 5
-    emit(title.upper(), "F2", 10.5, GREEN, 2)
+    y += 4
+    emit(title.upper(), "F2", 10, GREEN, 2)
     ops.append(
         f"0.06 0.42 0.24 RG 0.8 w {MARGIN} {PAGE_H-y+3:.2f} m "
         f"{PAGE_W-MARGIN} {PAGE_H-y+3:.2f} l S"
     )
-    y += 7
+    y += 5
 
 
 def job(title, dates, detail):
-    emit(f"{title} | {dates}", "F2", 9.6, DARK, 1)
-    paragraph(detail, gap=5)
+    emit(f"{title} | {dates}", "F2", 9, DARK, 1)
+    paragraph(detail, gap=3)
 
 
 def pdf_bytes():
@@ -65,20 +77,29 @@ def pdf_bytes():
         "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold "
         "/Encoding /WinAnsiEncoding >>"
     )
-    stream = "\n".join(ops).encode("cp1252", "replace")
-    content = add(
-        f"<< /Length {len(stream)} >>\nstream\n".encode()
-        + stream
-        + b"\nendstream"
-    )
-    page = add(b"")
-    pages = add(f"<< /Type /Pages /Kids [{page} 0 R] /Count 1 >>")
-    objects[page - 1] = (
-        f"<< /Type /Page /Parent {pages} 0 R /MediaBox [0 0 {PAGE_W:.2f} "
-        f"{PAGE_H:.2f}] /Resources << /Font << /F1 {regular} 0 R "
-        f"/F2 {bold} 0 R >> >> /Contents {content} 0 R >>"
+    content_ids = []
+    for page_ops in pages:
+        stream = "\n".join(page_ops).encode("cp1252", "replace")
+        content_ids.append(
+            add(f"<< /Length {len(stream)} >>\nstream\n".encode() + stream + b"\nendstream")
+        )
+
+    pages_id = add(b"")
+    page_ids = []
+    for content_id in content_ids:
+        page_ids.append(
+            add(
+                f"<< /Type /Page /Parent {pages_id} 0 R /MediaBox [0 0 "
+                f"{PAGE_W:.2f} {PAGE_H:.2f}] /Resources << /Font << "
+                f"/F1 {regular} 0 R /F2 {bold} 0 R >> >> /Contents "
+                f"{content_id} 0 R >>"
+            )
+        )
+    kids = " ".join(f"{page_id} 0 R" for page_id in page_ids)
+    objects[pages_id - 1] = (
+        f"<< /Type /Pages /Kids [{kids}] /Count {len(page_ids)} >>"
     ).encode()
-    catalog = add(f"<< /Type /Catalog /Pages {pages} 0 R >>")
+    catalog = add(f"<< /Type /Catalog /Pages {pages_id} 0 R >>")
 
     output = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
     offsets = [0]
@@ -97,80 +118,100 @@ def pdf_bytes():
 
 
 emit("OSCAR CIMAS BRAVO", "F2", 21, DARK, 2)
-emit("Ingeniero Informático · Desarrollador Senior", "F1", 11, GREEN, 3)
-emit("Valladolid, España · oscarcb@live.com · linkedin.com/in/oscar-cimas-bravo", "F1", 8.5, GREY, 2)
-emit("github.com/J3np4y", "F1", 8.5, GREY, 2)
+emit("INGENIERO INFORMÁTICO · DESARROLLO DE SOFTWARE", "F1", 10.5, GREEN, 3)
+emit("Valladolid, España · oscarcb@live.com · linkedin.com/in/oscar-cimas-bravo", "F1", 8.2, GREY, 2)
+emit("github.com/J3np4y", "F1", 8.2, GREY, 2)
 
 section("Perfil")
 paragraph(
-    "Desarrollador senior con más de 8 años de experiencia desde 2017 en sistemas "
-    "empresariales, aplicaciones Java y proyectos tecnológicos para la administración "
-    "pública. Experiencia en desarrollo, mantenimiento, pruebas, evolución de "
-    "aplicaciones y análisis de incidencias con equipos técnicos y funcionales."
+    "Ingeniero informático con cerca de 9 años de experiencia en desarrollo backend "
+    "con Java y J2EE, principalmente en proyectos de la Administración Pública y "
+    "telecomunicaciones. Experiencia en aplicaciones web, servicios, SQL, pruebas y "
+    "mantenimiento evolutivo. Actualmente cursando un Máster de Desarrollo con IA."
 )
 
 section("Experiencia profesional")
 job(
-    "Programador Senior · ATK-TEKNEI",
-    "2020 - Actualidad",
-    "Desarrollo, mantenimiento, pruebas y evolución de aplicaciones empresariales "
-    "para la administración pública. Trabajo diario con Java, J2EE, JSF, EJB y "
-    "PrimeFaces sobre JBoss. Tecnologías: Java 1.7 / 1.8, Oracle, SonarQube, Jira.",
+    "Programador Senior · ATK-Bilbomatica",
+    "Mayo 2021 - Octubre 2026",
+    "Análisis, desarrollo, mantenimiento evolutivo, pruebas y asistencia técnica de "
+    "aplicaciones web de gestión para los departamentos de Alimentación, Desarrollo "
+    "Rural, Agricultura y Pesca, Sanidad y Medio Ambiente. Proyectos: aplicación "
+    "presupuestaria W85, Ingurunet y Estadísticas de Pesca AD44B. Stack: Java, Spring "
+    "MVC, JDBC/SQL, HTML, JavaScript, jQuery, AJAX, XML, JSP/JSTL y Maven; frameworks "
+    "corporativos RUP y UDA (EJIE).",
 )
 job(
-    "Programador Senior · ATK-NAHITEK",
-    "2018 - 2020",
-    "Desarrollo de aplicaciones y evolutivos para la administración pública, con "
-    "foco en calidad, mantenimiento y entrega coordinada. Tecnologías: JSF / EJB, "
-    "AJAX, SQL Server, Confluence.",
+    "Programador Senior · ATK-TEKNEI",
+    "Diciembre 2020 - Mayo 2021",
+    "Desarrollo, mantenimiento evolutivo y pruebas para la Administración Pública. "
+    "Proyectos SAREA y Udalekuak, con frameworks ATOM y BIDE. Java/J2EE, JSF, EJB, "
+    "PrimeFaces, AJAX, JavaScript, jQuery, JBoss, Oracle, SQL Server 2017, SVN y Jira.",
+)
+job(
+    "Programador Junior · ATK-NAHITEK",
+    "Octubre 2018 - Mayo 2020",
+    "Desarrollo de evolutivos, mantenimiento y pruebas en equipos Java para la "
+    "Administración Pública. Frameworks ATOM y BIDE; Java/J2EE, JSF, EJB, PrimeFaces, "
+    "AJAX, JavaScript, jQuery, JBoss, Oracle, SQL Server 2017, SVN y Jira.",
 )
 job(
     "SD Analyst · Neoris España",
-    "2017 - 2018",
-    "Desarrollo de evolutivos y resolución de incidencias en proyectos de "
-    "telecomunicaciones. Tecnologías: Java, PL/SQL, WebLogic, WSDL.",
-)
-job(
-    "Becario programador · Iberdrola, Valladolid",
-    "2011",
-    "Consultas en bases de datos, creación de vistas e informes.",
+    "Junio 2017 - Septiembre 2018",
+    "Mantenimiento evolutivo y resolución de incidencias en CRM Vodafone. Framework "
+    "SMART; Java, PL/SQL, XML, WSDL, WebLogic, PVCS, Eclipse, IntelliJ IDEA, SQL "
+    "Developer y SoapUI.",
 )
 
-section("Proyectos destacados")
+section("Proyectos")
 job(
-    "Buscaminas · Java, TeaVM, HTML / JavaScript",
-    "Proyecto personal",
-    "Lógica separada en modelo, controlador y API web; compilada a JavaScript para "
-    "publicación estática. 12 pruebas JUnit y tres niveles de dificultad.",
+    "Nexora · SaaS de documentación empresarial con IA",
+    "Proyecto educativo en desarrollo",
+    "Aplicación web para colaborar sobre documentación y obtener respuestas en "
+    "lenguaje natural con citas a las fuentes. Frontend Next.js/TypeScript con proxy "
+    "same-origin; API FastAPI/Python; PostgreSQL, SQLAlchemy, Alembic y pgvector; "
+    "RAG con OpenAI. Incluye organizaciones y roles, sesiones revocables, gestión "
+    "de documentos, búsqueda y citas. Repositorio: github.com/J3np4y/SaaS-Documentacion-IA. "
+    "Prototipo educativo, no preparado para producción.",
 )
 job(
-    "Editor y previsualizador de escenas WebGL",
-    "TFG · Universidad de Valladolid",
-    "Proyecto académico descrito como herramienta de apoyo para la asignatura de "
-    "Programación de aplicaciones gráficas.",
+    "Editor y previsualizador de contenido WebGL",
+    "Proyecto fin de grado · Universidad de Valladolid",
+    "Editor de escritorio desarrollado en Java con navegador Chromium integrado "
+    "para previsualizar páginas HTML/JavaScript y gráficos 3D WebGL.",
 )
 
 section("Formación")
 paragraph(
-    "Ingeniería Informática, mención en Ingeniería de Software · Universidad de "
-    "Valladolid (2011 - 2017)",
+    "Máster de Desarrollo con IA · BIG school / Universidad Isabel I · En curso",
     gap=2,
 )
 paragraph(
-    "Desarrollo de Aplicaciones, CFGS · Colegio La Salle (2009 - 2011)",
+    "Grado en Ingeniería Informática, mención Ingeniería del Software · Universidad "
+    "de Valladolid (2011 - 2017)",
     gap=2,
 )
-paragraph("Spring Boot · Formación especializada en desarrollo web", gap=2)
-
-section("Conocimientos técnicos")
 paragraph(
-    "Lenguajes: Java, JavaScript, SQL, PL/SQL, HTML / CSS. Frameworks y tecnologías: "
-    "J2EE, JSF, EJB, PrimeFaces, AJAX, Spring Boot, WebGL, TeaVM. Datos e "
-    "infraestructura: Oracle, SQL Server, JBoss, WebLogic, Linux. Herramientas: "
-    "Git, Maven, SonarQube, Jira, Confluence."
+    "Técnico Superior en Desarrollo de Aplicaciones Informáticas · Colegio La Salle "
+    "(2009 - 2011)",
+    gap=2,
+)
+paragraph(
+    "Cursos: Iniciación a la IA y desarrollo con IA · BIG school. Python · Mouredev, "
+    "en curso.",
+    gap=2,
 )
 
-if y > PAGE_H - 45:
-    raise ValueError(f"El contenido excede una página: {y:.1f}/{PAGE_H:.1f}")
+section("Conocimientos e idiomas")
+paragraph(
+    "Lenguajes: Java, SQL, PL/SQL, JavaScript, Python (básico), TypeScript, HTML, "
+    "JSP, XML y CSS. Backend: Spring MVC, JDBC, J2EE, JSF, EJB y FastAPI. Datos: "
+    "Oracle, SQL Server y PostgreSQL. Herramientas: Maven, JBoss, WebLogic, Git, "
+    "SVN, Jira, SonarQube, SoapUI, Eclipse, IntelliJ IDEA y Docker Compose."
+)
+paragraph("Español: nativo · Inglés: B1")
+
+if len(pages) > 2:
+    raise ValueError(f"El CV supera las dos páginas: {len(pages)}")
 
 Path(__file__).with_name("CV-Oscar-Cimas-Bravo.pdf").write_bytes(pdf_bytes())
